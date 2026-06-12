@@ -7,34 +7,20 @@ Multi-agent system that automates startup analysis for Venture Capitalists.
 ## Architecture
 
 ```
-React Frontend  →  FastAPI Backend  →  LangGraph Agent Pipeline
-    (Vite)           (Python)               (OpenAI GPT-4o)
-                                                   |
-                                    ┌──────────────┼──────────────┐
-                                    ↓              ↓              ↓
-                              Google Search   Web Scraper    PDF Parser
-                              (Serper API)
-```
-
----
-
-## Agent Pipeline
-
-```
 Input (Company Name + URL  or  Full Pitch Deck)
-    ↓
+        ↓
 [1] Research Agent     → scrapes website, searches news, builds pitch deck
-    ↓
+        ↓
 [2] Market Analyst     → verifies TAM/SAM, checks competitors, scores timing
-    ↓
+        ↓
 [3] Product Analyst    → audits tech stack, checks if product is live
-    ↓
+        ↓
 [4] Traction Analyst   → cross-checks metrics, finds red flags
-    ↓
+        ↓
 [5] Debate Moderator   → forces analysts to argue contradictions
-    ↓
+        ↓
 [6] Questions Agent    → generates 8-12 hard questions before investing
-    ↓
+        ↓
 [7] GP Synthesizer     → writes final PASS / DIG DEEPER / INVEST memo
 ```
 
@@ -42,33 +28,33 @@ Input (Company Name + URL  or  Full Pitch Deck)
 
 ## Stack
 
-| Layer    | Technology              |
-|----------|-------------------------|
-| Frontend | React + Vite + Tailwind |
-| Backend  | Python + FastAPI        |
-| AI       | OpenAI GPT-4o           |
-| Agents   | LangChain + LangGraph   |
-| Search   | Serper API              |
+| Layer    | Technology                  |
+|----------|-----------------------------|
+| Frontend | Streamlit                   |
+| AI Model | Google Gemini 2.5 Flash     |
+| Agents   | LangChain + LangGraph       |
+| Search   | Serper API (Google Search)  |
 
 ---
 
-## Running Locally
+## Setup
 
-**Backend**
 ```bash
-cd backend
 pip install -r requirements.txt
-uvicorn api:app --reload --port 8000
 ```
 
-**Frontend**
+Create a `.env` file in the root:
+
+```
+GOOGLE_API_KEY=your_key_here
+SERPER_API_KEY=your_key_here
+```
+
+Run the app:
+
 ```bash
-cd frontend
-npm install
-npm run dev
+streamlit run ui/app.py
 ```
-
-App runs at `http://localhost:5173`
 
 ---
 
@@ -87,4 +73,5 @@ App runs at `http://localhost:5173`
 - Traction score + red flags
 - Live agent debate transcript
 - 8-12 critical questions before investing
-- Final investment memo with recommendation
+- Final investment memo: PASS / DIG DEEPER / INVEST
+- Downloadable full report
