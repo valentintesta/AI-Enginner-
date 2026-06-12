@@ -1,0 +1,706 @@
+﻿{
+  "name": "MCP Hubspot Olist - Meetings API",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "962b54d9-2389-4368-bbba-c13661dc0afc"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -32
+      ],
+      "id": "98150c7b-8c49-47fc-a759-f30b51d68e0d",
+      "name": "MCP Server Trigger",
+      "webhookId": "962b54d9-2389-4368-bbba-c13661dc0afc"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        688,
+        384
+      ],
+      "id": "7bb3e1b7-aa7f-4d68-b95b-6706e1aface9",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst updatedItems = items.map((item) => {\n  item.json.body.slug = item.json.body.slug.replace(/\\//g, \"%2F\");\n  return item;\n});\nreturn updatedItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        400
+      ],
+      "id": "3cc9e9eb-2d74-4f6c-a20b-e0f07a592007",
+      "name": "Encoding ( / for %2F )"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (Run Once for All Items)\n\nconst TZ = $('Encoding ( / for %2F )').first().json.body.timezone;\nconst LOCALE_ES = 'es-MX';\n\n// Helpers de formato en zona horaria\nconst fmtDayKey = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }); // YYYY-MM-DD\nconst fmtWeekday = new Intl.DateTimeFormat('es-ES', { timeZone: TZ, weekday: 'long' });\nconst fmtHM = new Intl.DateTimeFormat(LOCALE_ES, { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });\n\nconst capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;\n\n// 1) Recolectar el/los JSON de entrada y normalizar\nconst all = $input.all().map(i => i.json);\nlet records = [];\nfor (const j of all) {\n  if (Array.isArray(j)) records.push(...j);\n  else records.push(j);\n}\n\n// 2) Tomar la primera duraciÃ³n disponible y sus slots\nlet durationMs = null;\nlet availabilities = [];\n\nfor (const rec of records) {\n  const byDuration = rec?.linkAvailability?.linkAvailabilityByDuration || {};\n  const keys = Object.keys(byDuration);\n  if (!keys.length) continue;\n\n  const k = keys[0];\n  const block = byDuration[k];\n  const d = Number(k) || Number(block?.meetingDurationMillis);\n  if (!isNaN(d) && block?.availabilities?.length) {\n    durationMs = d;\n    availabilities = block.availabilities;\n    break;\n  }\n}\n\nif (durationMs == null) {\n  return [{\n    json: {\n      \"DuraciÃ³n de la reuniÃ³n\": \"\",\n      \"Dias y horarios disponibles\": []\n    }\n  }];\n}\n\n// 3) Agrupar por dÃ­a local y formatear horarios\nconst byDay = new Map();\n\nfor (const slot of availabilities) {\n  const startMs = Number(slot.startMillisUtc);\n  if (isNaN(startMs)) continue;\n\n  const d = new Date(startMs);\n  const dayKey = fmtDayKey.format(d);               // 'YYYY-MM-DD'\n  const weekday = capitalize(fmtWeekday.format(d)); // 'Martes', 'MiÃ©rcoles', etc.\n  const time = fmtHM.format(d).replace(/\\u202f|\\u00a0/g, ''); // 'HH:MM' sin espacios duros\n\n  if (!byDay.has(dayKey)) {\n    byDay.set(dayKey, { weekday, times: new Set() });\n  }\n  byDay.get(dayKey).times.add(time);\n}\n\n// 4) Ordenar dÃ­as y armar el arreglo solicitado\nconst daysSorted = Array.from(byDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));\nconst diasYHorarios = daysSorted.map(([dayKey, info]) => {\n  const times = Array.from(info.times).sort((a, b) => a.localeCompare(b));\n  return {\n    \"DÃ­a\": `${info.weekday} ${dayKey}`,\n    \"Horarios\": times.join(', ')\n  };\n});\n\n// 5) Construir el JSON final con las claves exactas que pediste\nconst minutes = durationMs / 60000;\nconst output = {\n  \"Duracion de la reunion\": `${durationMs} milissegundos (${minutes.toFixed(1)} minutos)`,\n  \"Dias y horarios disponibles\": diasYHorarios\n};\n\n// 6) Devolver un Ãºnico item con ese JSON\nreturn [{ json: output }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        304
+      ],
+      "id": "d4488fad-4831-411d-83d5-5ea9f8f12f8f",
+      "name": "Format availability (UNIX to Text)"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Herramienta para ver la disponibilidad de una agenda",
+        "method": "POST",
+        "url": "https://getdarwinai.app.n8n.cloud/webhook/095514cf-4437-4658-90fb-cd585de74c38",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "timezone",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `El huso horario`, 'string') }}"
+            },
+            {
+              "name": "slug",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `La ruta o slug de la agenda`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -592,
+        192
+      ],
+      "id": "b7b11b79-d572-4688-98c9-c0a3e1257ffe",
+      "name": "getAvailability Tool"
+    },
+    {
+      "parameters": {
+        "content": "Flow to get the agenda availability",
+        "height": 80,
+        "width": 256
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -880,
+        400
+      ],
+      "typeVersion": 1,
+      "id": "e0ba1e70-1ed0-4ebe-bfe5-7dddc8b56a0a",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        112,
+        688
+      ],
+      "id": "329f99db-65f6-4d1f-9e8a-a21bf6f69655",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/scheduler/v3/meetings/meeting-links/book",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUBSPOT_BEARER_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"duration\": \"{{ $json.duration }}\",\n    \"firstName\": \"{{ $json.firstName }}\",\n    \"lastName\": \"{{ $json.lastName }}\",\n    \"likelyAvailableUserIds\": [\"{{ $json.likelyAvailableUserIds[0] }}\"],\n    \"timezone\": \"{{ $json.timezone }}\",\n    \"startTime\": \"{{ $json.startTime }}\",\n    \"email\": \"{{ $json.email }}\",\n    \"slug\": \"{{ $json.slug }}\",\n    \"subject\": \"Koltin - {{ $json.firstName }} {{ $json.lastName }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        688
+      ],
+      "id": "229fc3fc-6024-43d7-80bb-f9bc4872a680",
+      "name": "setMeeting Request"
+    },
+    {
+      "parameters": {
+        "content": "Flow to set a meeting",
+        "height": 80,
+        "width": 256,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -880,
+        688
+      ],
+      "typeVersion": 1,
+      "id": "a6f58cd6-3797-4c2f-8c8a-16f6da917476",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Herramienta para agendar una reuniÃ³n",
+        "method": "POST",
+        "url": "https://getdarwinai.app.n8n.cloud/webhook/975d118a-ff3b-4553-aa0d-481da08ef07d",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `El nombre del humano`, 'string') }}"
+            },
+            {
+              "name": "lastname",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `El apellido del humano`, 'string') }}"
+            },
+            {
+              "name": "organizerID",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `El valor del campo user_id correspondiente`, 'string') }}"
+            },
+            {
+              "name": "startTime",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `La hora de inicio de la reuniÃ³n que la persona eligiÃ³ mÃ¡s 3 horas, para convertir la hora de Brasil a UTC. El formato de la fecha debe ser YYYY-MM-DDThh:mm:00Z, por ejemplo, 2025-06-30T16:30:00Z. Por ejemplo, si la persona eligiÃ³ programar a las 16:00 del 2025-06-01, el valor calculado deberÃ­a ser 2025-06-01T19:00:00Z, ya que se agregaron 3 horas para convertir la hora a UTC. Las horas estÃ¡n en formato de 24 horas.`, 'string') }}"
+            },
+            {
+              "name": "slug",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters4_Value', `La ruta o slug de la agenda en la llamada de la herramienta \"getAvailability Tool\"`, 'string') }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters5_Value', `El email del humano`, 'string') }}"
+            },
+            {
+              "name": "timezone",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters6_Value', `El huso horario`, 'string') }}"
+            },
+            {
+              "name": "duration",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters7_Value', `La duraciÃ³n de la reuniÃ³n en milisegundos presente en el retorno respuesta de la herramienta \"getAvailability Tool\"`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -448,
+        192
+      ],
+      "id": "b72ff94a-d03c-4c1e-82af-88eba70251cd",
+      "name": "setMeeting Tool"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all()[0]?.json;\n\nconst payload = {\n    duration: input?.body?.duration,\n    firstName: input?.body?.name,\n    lastName: input?.body?.lastname,\n    likelyAvailableUserIds: [input?.body?.organizerID],\n    timezone: input?.body?.timezone,\n    startTime: input?.body?.startTime,\n    email: input?.body?.email,\n    slug: input?.body?.slug\n};\n\nreturn payload;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        688
+      ],
+      "id": "5afe794e-660e-4eb5-9759-df39503b690a",
+      "name": "Form payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  // 1. Create a safe copy of the JSON structure so we can modify it\n  const newItem = {\n    ...item,\n    json: {\n      ...item.json,\n      linkAvailability: {\n        ...item.json.linkAvailability,\n        linkAvailabilityByDuration: {\n          ...item.json.linkAvailability?.linkAvailabilityByDuration\n        }\n      }\n    }\n  };\n\n  const durations = newItem.json.linkAvailability?.linkAvailabilityByDuration;\n\n  // 2. Filter keys if the object exists\n  if (durations) {\n    Object.keys(durations).forEach(key => {\n      // Logic: If the key is NOT \"1800000\", delete it.\n      if (key !== \"1800000\") {\n        delete durations[key];\n      }\n    });\n  }\n\n  return newItem;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        304
+      ],
+      "id": "7f7012dc-841d-4947-aa3e-fa2d053e3d25",
+      "name": "Only keep times for 30min meeting"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hubapi.com/scheduler/v3/meetings/meeting-links/book/availability-page/{{ $json.body.slug }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timezone",
+              "value": "={{ $json.body.timezone }}"
+            },
+            {
+              "name": "monthOffset",
+              "value": "0"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUBSPOT_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        304
+      ],
+      "id": "b365f332-e1f6-4a4b-8772-3161d8ac27c9",
+      "name": "getAvailability Request month 0"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hubapi.com/scheduler/v3/meetings/meeting-links/book/availability-page/{{ $('getAvailability').item.json.body.slug }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timezone",
+              "value": "={{ $('getAvailability').item.json.body.timezone }}"
+            },
+            {
+              "name": "monthOffset",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUBSPOT_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        464
+      ],
+      "id": "030568e8-f106-4a9a-ade2-88c22e960221",
+      "name": "getAvailability Request month 1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  // 1. Create a safe copy of the JSON structure so we can modify it\n  const newItem = {\n    ...item,\n    json: {\n      ...item.json,\n      linkAvailability: {\n        ...item.json.linkAvailability,\n        linkAvailabilityByDuration: {\n          ...item.json.linkAvailability?.linkAvailabilityByDuration\n        }\n      }\n    }\n  };\n\n  const durations = newItem.json.linkAvailability?.linkAvailabilityByDuration;\n\n  // 2. Filter keys if the object exists\n  if (durations) {\n    Object.keys(durations).forEach(key => {\n      // Logic: If the key is NOT \"1800000\", delete it.\n      if (key !== \"1800000\") {\n        delete durations[key];\n      }\n    });\n  }\n\n  return newItem;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        464
+      ],
+      "id": "5e4f97b3-4945-48c9-87b0-dc1cdff551b1",
+      "name": "Only keep times for 30min meeting1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (Run Once for All Items)\n\nconst TZ = $('Encoding ( / for %2F )').first().json.body.timezone;\nconst LOCALE_ES = 'es-MX';\n\n// Helpers de formato en zona horaria\nconst fmtDayKey = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }); // YYYY-MM-DD\nconst fmtWeekday = new Intl.DateTimeFormat('es-ES', { timeZone: TZ, weekday: 'long' });\nconst fmtHM = new Intl.DateTimeFormat(LOCALE_ES, { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });\n\nconst capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;\n\n// 1) Recolectar el/los JSON de entrada y normalizar\nconst all = $input.all().map(i => i.json);\nlet records = [];\nfor (const j of all) {\n  if (Array.isArray(j)) records.push(...j);\n  else records.push(j);\n}\n\n// 2) Tomar la primera duraciÃ³n disponible y sus slots\nlet durationMs = null;\nlet availabilities = [];\n\nfor (const rec of records) {\n  const byDuration = rec?.linkAvailability?.linkAvailabilityByDuration || {};\n  const keys = Object.keys(byDuration);\n  if (!keys.length) continue;\n\n  const k = keys[0];\n  const block = byDuration[k];\n  const d = Number(k) || Number(block?.meetingDurationMillis);\n  if (!isNaN(d) && block?.availabilities?.length) {\n    durationMs = d;\n    availabilities = block.availabilities;\n    break;\n  }\n}\n\nif (durationMs == null) {\n  return [{\n    json: {\n      \"DuraciÃ³n de la reuniÃ³n\": \"\",\n      \"Dias y horarios disponibles\": []\n    }\n  }];\n}\n\n// 3) Agrupar por dÃ­a local y formatear horarios\nconst byDay = new Map();\n\nfor (const slot of availabilities) {\n  const startMs = Number(slot.startMillisUtc);\n  if (isNaN(startMs)) continue;\n\n  const d = new Date(startMs);\n  const dayKey = fmtDayKey.format(d);               // 'YYYY-MM-DD'\n  const weekday = capitalize(fmtWeekday.format(d)); // 'Martes', 'MiÃ©rcoles', etc.\n  const time = fmtHM.format(d).replace(/\\u202f|\\u00a0/g, ''); // 'HH:MM' sin espacios duros\n\n  if (!byDay.has(dayKey)) {\n    byDay.set(dayKey, { weekday, times: new Set() });\n  }\n  byDay.get(dayKey).times.add(time);\n}\n\n// 4) Ordenar dÃ­as y armar el arreglo solicitado\nconst daysSorted = Array.from(byDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));\nconst diasYHorarios = daysSorted.map(([dayKey, info]) => {\n  const times = Array.from(info.times).sort((a, b) => a.localeCompare(b));\n  return {\n    \"DÃ­a\": `${info.weekday} ${dayKey}`,\n    \"Horarios\": times.join(', ')\n  };\n});\n\n// 5) Construir el JSON final con las claves exactas que pediste\nconst minutes = durationMs / 60000;\nconst output = {\n  \"Duracion de la reunion\": `${durationMs} milissegundos (${minutes.toFixed(1)} minutos)`,\n  \"Dias y horarios disponibles\": diasYHorarios\n};\n\n// 6) Devolver un Ãºnico item con ese JSON\nreturn [{ json: output }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        464
+      ],
+      "id": "a30bdabb-78df-433e-ae3d-3eb17e27a2d8",
+      "name": "Format availability (UNIX to Text)1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        496,
+        384
+      ],
+      "id": "e8320fbe-99b5-4ea0-9c0d-74e5a2d90275",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Herramienta para buscar un contacto",
+        "method": "POST",
+        "url": "https://getdarwinai.app.n8n.cloud/webhook/3b2c988e-d05b-441f-9554-00779c8f57b4",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `The contact's/human's phone number`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -304,
+        192
+      ],
+      "id": "e8ffa140-b8b0-4bca-a39f-0afffe789acb",
+      "name": "getContact Tool"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "095514cf-4437-4658-90fb-cd585de74c38",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -576,
+        400
+      ],
+      "id": "6b6f1dfd-e7f3-4a46-9b21-bdd8d4d16eea",
+      "name": "Webhook",
+      "webhookId": "095514cf-4437-4658-90fb-cd585de74c38"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "975d118a-ff3b-4553-aa0d-481da08ef07d",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -576,
+        688
+      ],
+      "id": "5457ddb4-a70c-4ed3-984c-e114b40715a5",
+      "name": "Webhook1",
+      "webhookId": "975d118a-ff3b-4553-aa0d-481da08ef07d"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        32,
+        912
+      ],
+      "id": "636dc038-1be6-4e9c-9a4c-4b32d81a6d74",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hubapi.com/crm/v3/owners/{{ $json.results[0].properties.hubspot_owner_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUBSPOT_BEARER_TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        912
+      ],
+      "id": "9f0816cb-d20a-4c76-9114-c188967c2820",
+      "name": "Get owner"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_HUBSPOT_BEARER_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"filterGroups\": [\n      {\n        \"filters\": [\n          {\n            \"propertyName\": \"phone\",\n            \"operator\": \"EQ\",\n            \"value\": \"+{{ $json.query.phone }}\"\n          }\n        ]\n      }\n    ],\n  \"properties\": [\"hs_object_id\", \"firstname\", \"phone\", \"hubspot_owner_id\", \"email\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -368,
+        912
+      ],
+      "id": "37de26ef-93ae-42e3-838e-b959cb74e584",
+      "name": "Search Contact"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "3b2c988e-d05b-441f-9554-00779c8f57b4",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -560,
+        912
+      ],
+      "id": "7a50a3bf-df51-4e80-9960-6119086ded52",
+      "name": "Webhook2",
+      "webhookId": "3b2c988e-d05b-441f-9554-00779c8f57b4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Encoding ( / for %2F )": {
+      "main": [
+        [
+          {
+            "node": "getAvailability Request month 0",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "getAvailability Request month 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format availability (UNIX to Text)": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getAvailability Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setMeeting Request": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setMeeting Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form payload": {
+      "main": [
+        [
+          {
+            "node": "setMeeting Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only keep times for 30min meeting": {
+      "main": [
+        [
+          {
+            "node": "Format availability (UNIX to Text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getAvailability Request month 0": {
+      "main": [
+        [
+          {
+            "node": "Only keep times for 30min meeting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getAvailability Request month 1": {
+      "main": [
+        [
+          {
+            "node": "Only keep times for 30min meeting1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only keep times for 30min meeting1": {
+      "main": [
+        [
+          {
+            "node": "Format availability (UNIX to Text)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format availability (UNIX to Text)1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getContact Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Encoding ( / for %2F )",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Form payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get owner": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Contact": {
+      "main": [
+        [
+          {
+            "node": "Get owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Search Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "GKME6vPO7OWWel0y",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "e537c0ea-0043-42fc-8239-1606b50ab3d9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "55571e92873dad1c313e1ff5d9be1cdca5978f8aafda74504a91ad01a64bf0c0"
+  },
+  "id": "8oVtUROI1k2bC0cF",
+  "tags": []
+}
