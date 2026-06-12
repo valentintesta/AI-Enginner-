@@ -30,8 +30,8 @@ Input (Company Name + URL  or  Full Pitch Deck)
 
 | Layer    | Technology                  |
 |----------|-----------------------------|
-| Frontend | Streamlit                   |
-| AI Model | Google Gemini 2.5 Flash     |
+| Frontend | React                       |
+| AI Model | Open AI                     |
 | Agents   | LangChain + LangGraph       |
 | Search   | Serper API (Google Search)  |
 
