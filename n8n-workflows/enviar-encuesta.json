@@ -1,0 +1,201 @@
+{
+  "name": "enviar encuesta",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "encuestaboston",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a4f92259-0bed-4c5a-b9e3-90775d4ee60b",
+      "name": "Webhook",
+      "webhookId": "05f0fc1c-a46e-4b27-ae89-f819bc0b10ea"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  // Extraemos el valor exacto de 'estrellas' que viene dentro de 'body'\n  const inputRating = item.json.body.estrellas; \n\n  // Definimos el mapeo basado en los números\n  const mapping = {\n    \"1\": \"p__1_estrella\",\n    \"2\": \"p__2_estrellas\",\n    \"3\": \"p__3_estrellas\",\n    \"4\": \"p__4_estrellas\",\n    \"5\": \"p__5_estrellas\"\n  };\n\n  // Creamos la nueva variable hubspot_rating. \n  // Si por algún error llega un número raro, dirá \"valor_no_valido\"\n  item.json.hubspot_rating = mapping[inputRating] || \"valor_no_valido\";\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -208
+      ],
+      "id": "7865a974-933a-464f-adab-5c8a71f3d46f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/2-198391026/{{ $json.body.idencuesta }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"properties\": {\n    \"comentario_nps\": \"{{ $json.body.comentario }}\",\n    \"valoracion_de_estrellas\": \"{{ $json.hubspot_rating }}\",\n    \"estatusencuesta\": \"Respondida\",\n    \"date_response\": \"{{ $json.currentDate }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1472,
+        16
+      ],
+      "id": "7ff0807f-ff18-451d-8b00-ac3c6e9b2a2c",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "R5TjSPG6jeAOGU0a",
+          "name": "Token Boston"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1120,
+        16
+      ],
+      "id": "32b777ba-e6c8-4c81-b42b-bb7d572a7c72",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        512,
+        192
+      ],
+      "id": "001c94c1-2d1a-49c9-9ee5-7a5ca8dd6c9f",
+      "name": "Date & Time"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "getdarwinai.app.n8n.cloud",
+            "user-agent": "Python/3.11 aiohttp/3.11.11",
+            "content-length": "99",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "52.0.172.190",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "US",
+            "cf-ray": "9e506811eb87ad56-IAD",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "sentry-trace": "73c77db155de4595859a7a860ca939e0-b92d1860d04779f1",
+            "x-forwarded-for": "52.0.172.190, 104.23.211.89",
+            "x-forwarded-host": "getdarwinai.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-5-8d55db77-5k58t",
+            "x-is-trusted": "yes",
+            "x-real-ip": "52.0.172.190"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "comentario": "todo bien me gusto el tratamiento",
+            "estrellas": "4",
+            "idencuesta": "423401818360"
+          },
+          "webhookUrl": "https://getdarwinai.app.n8n.cloud/webhook/encuestaboston",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "timezone": "America/Mexico_City",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "efbc78d9-035e-42e6-b0e8-f5e76397ced5",
+  "meta": {
+    "instanceId": "55571e92873dad1c313e1ff5d9be1cdca5978f8aafda74504a91ad01a64bf0c0"
+  },
+  "id": "aEiQRyGNuaVFek5W",
+  "tags": []
+}
