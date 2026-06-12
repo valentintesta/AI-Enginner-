@@ -46,7 +46,7 @@ pip install -r requirements.txt
 Create a `.env` file in the root:
 
 ```
-GOOGLE_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
 SERPER_API_KEY=your_key_here
 ```
 
